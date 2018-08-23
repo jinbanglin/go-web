@@ -1,10 +1,10 @@
-# Go Web [![GoDoc](https://godoc.org/github.com/micro/go-web?status.svg)](https://godoc.org/github.com/micro/go-web) [![Travis CI](https://travis-ci.org/micro/go-web.svg?branch=master)](https://travis-ci.org/micro/go-web) [![Go Report Card](https://goreportcard.com/badge/micro/go-web)](https://goreportcard.com/report/github.com/micro/go-web)
+# Go Web [![GoDoc](https://godoc.org/github.com/jinbanglin/go-web?status.svg)](https://godoc.org/github.com/jinbanglin/go-web) [![Travis CI](https://travis-ci.org/micro/go-web.svg?branch=master)](https://travis-ci.org/micro/go-web) [![Go Report Card](https://goreportcard.com/badge/micro/go-web)](https://goreportcard.com/report/github.com/jinbanglin/go-web)
 
 **Go-web** is a framework for micro web app development. Build web apps as microservices.
 
 ## Overview
 
-Go-web is a tiny HTTP web server library which leverages [go-micro](https://github.com/micro/go-micro) to create 
+Go-web is a tiny HTTP web server library which leverages [go-micro](https://github.com/jinbanglin/go-micro) to create 
 micro web services as first class citizens in a microservice world. It wraps go-micro to give you service discovery, 
 heartbeating and the ability to create web apps as microservices.
 
@@ -25,7 +25,7 @@ heartbeating and the ability to create web apps as microservices.
 
 Go-web makes use of go-micro which means it needs service discovery
 
-See the [go-micro](https://github.com/micro/go-micro#service-discovery) for install instructions
+See the [go-micro](https://github.com/jinbanglin/go-micro#service-discovery) for install instructions
 
 For a quick start use consul
 

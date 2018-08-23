@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/micro/cli"
-	"github.com/micro/go-micro/cmd"
-	"github.com/micro/go-micro/registry"
+	"github.com/jinbanglin/cli"
+	"github.com/jinbanglin/go-micro/cmd"
+	"github.com/jinbanglin/go-micro/registry"
 )
 
 type Options struct {

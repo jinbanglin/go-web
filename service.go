@@ -12,14 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/micro/cli"
-	"github.com/micro/go-log"
-	"github.com/micro/go-micro/registry"
-	maddr "github.com/micro/util/go/lib/addr"
-	mhttp "github.com/micro/util/go/lib/http"
+	"github.com/jinbanglin/cli"
+	"github.com/jinbanglin/go-log"
+	"github.com/jinbanglin/go-micro/registry"
+	maddr "github.com/jinbanglin/util/go/lib/addr"
+	mhttp "github.com/jinbanglin/util/go/lib/http"
 
-	mnet "github.com/micro/util/go/lib/net"
-	mls "github.com/micro/util/go/lib/tls"
+	mnet "github.com/jinbanglin/util/go/lib/net"
+	mls "github.com/jinbanglin/util/go/lib/tls"
 )
 
 type service struct {
