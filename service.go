@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/jinbanglin/cli"
-	"github.com/jinbanglin/go-log"
+	"github.com/jinbanglin/log"
 	"github.com/jinbanglin/go-micro/registry"
 	maddr "github.com/jinbanglin/util/go/lib/addr"
 	mhttp "github.com/jinbanglin/util/go/lib/http"
@@ -176,7 +176,7 @@ func (s *service) start() error {
 		ch <- l.Close()
 	}()
 
-	log.Logf("Listening on %v\n", l.Addr().String())
+	log.Infof("Listening on %v\n", l.Addr().String())
 	return nil
 }
 
@@ -198,7 +198,7 @@ func (s *service) stop() error {
 	s.exit <- ch
 	s.running = false
 
-	log.Log("Stopping")
+	log.Info("Stopping")
 
 	for _, fn := range s.opts.AfterStop {
 		if err := fn(); err != nil {
@@ -327,10 +327,10 @@ func (s *service) Run() error {
 	select {
 	// wait on kill signal
 	case sig := <-ch:
-		log.Logf("Received signal %s\n", sig)
+		log.Infof("Received signal %s\n", sig)
 	// wait on context cancel
 	case <-s.opts.Context.Done():
-		log.Logf("Received context shutdown")
+		log.Infof("Received context shutdown")
 	}
 
 	// exit reg loop
