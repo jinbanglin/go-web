@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package hello;
+
+import "github.com/jinbanglin/micro/message/message.proto";
+//传递的消息结构体
+message HelloReq {
+  string hello=1;
+}
+
+message HelloRsp{
+  msg.Message message=1;
+  string world=2;
+}
+
+//protoc --proto_path=${GOPATH}/src:. --gogofast_out=plugins=micro:. *.proto
