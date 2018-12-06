@@ -31,6 +31,9 @@ const (
 var gUpGrader = websocket.Upgrader{
   ReadBufferSize:  1024,
   WriteBufferSize: 1024,
+  CheckOrigin: func(r *http.Request) bool {
+    return true
+  },
 }
 
 func (c *Client) setBase() {
@@ -122,8 +125,6 @@ func (c *Client) writePump() {
   }
 }
 
-var gExistErr = []byte(`exist!`)
-
 func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request) {
   client, ok := search(hub, userId)
   if !ok {
@@ -142,9 +143,7 @@ func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request
 
     go client.writePump()
     go client.readPump()
-    return
   }
-  w.Write(gExistErr)
 }
 
 func search(hub *WsHub, userId string) (*Client, bool) {
