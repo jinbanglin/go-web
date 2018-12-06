@@ -17,6 +17,7 @@ message HelloRsp {
 
 //1
 message CreateRoomReq {
+    string hi=1;
 }
 
 message CreateRoomRsp {

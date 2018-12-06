@@ -10,8 +10,8 @@ import (
   "github.com/jinbanglin/log"
   "github.com/gorilla/websocket"
   "github.com/jinbanglin/helper"
-  "github.com/json-iterator/go"
   "github.com/jinbanglin/micro/message"
+  "encoding/json"
 )
 
 const (
@@ -60,7 +60,7 @@ func (c *Client) readPump() {
       break
     }
     userLoad := &msg.WsPacket{}
-    if err = jsoniter.Unmarshal(packet, userLoad); err != nil {
+    if err = json.Unmarshal(packet, userLoad); err != nil {
       log.Error(err)
       break
     } else {
@@ -70,7 +70,7 @@ func (c *Client) readPump() {
         break
       }
       req := reflect.New(s.RequestType).Interface().(proto.Message)
-      if err = jsoniter.Unmarshal(userLoad.Payload, req); err != nil {
+      if err = json.Unmarshal(userLoad.Payload, req); err != nil {
         log.Error(err)
         break
       }
