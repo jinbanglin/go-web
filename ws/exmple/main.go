@@ -22,7 +22,7 @@ import (
 
 func main() {
   service := web.NewService(
-    web.Name("go.micro.web.stream"),
+    web.Name("go.micro.web.hello"),
   )
 
   if err := service.Init(); err != nil {
@@ -31,12 +31,11 @@ func main() {
   app := gin.Default()
   ws.SetupWEBSocketHub(1024)
   ws.GHub.RegisterEndpoint(1, &hello.HelloReq{}, hello_world.Hello)
-  app.POST("/connect", func(context *gin.Context) {
-    ws.WSUpgrade(ws.GHub, context.Query("userid"), context.Writer, context.Request)
-  })
+  ws.GHub.RegisterEndpoint(2, &hello.HelloReq{}, hello_world.CreateRoom)
+  ws.GHub.RegisterEndpoint(3, &hello.HelloReq{}, hello_world.EntryRoom)
 
-  app.POST("/create", func(context *gin.Context) {
-    ws.WSCreateRoom(ws.GHub, context.Query("userid"), context.Writer, context.Request)
+  app.POST("/ws/:userid", func(context *gin.Context) {
+    ws.WSUpgrade(ws.GHub, context.Param("userid"), context.Writer, context.Request)
   })
   if err := service.Run(); err != nil {
     log.Fatal(err)

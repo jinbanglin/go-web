@@ -2,19 +2,16 @@ package ws
 
 import (
   "sync"
-  "context"
   "reflect"
+  "time"
+  "errors"
+  "net/http"
   "github.com/gogo/protobuf/proto"
   "github.com/jinbanglin/log"
-  "errors"
   "github.com/gorilla/websocket"
-  "time"
   "github.com/jinbanglin/helper"
-  "net/http"
   "github.com/json-iterator/go"
   "github.com/jinbanglin/micro/message"
-  "github.com/rs/xid"
-  "strconv"
 )
 
 const (
@@ -24,7 +21,7 @@ const (
   // Time allowed to read the next pong message from the peer.
   pongWait = 60 * time.Second
 
-  // Send pings to peer with this period. Must be less than pongWait.
+  // send pings to peer with this period. Must be less than pongWait.
   pingPeriod = (pongWait * 9) / 10
 
   // Maximum message size allowed from peer.
@@ -42,9 +39,12 @@ func (c *Client) setBase() {
   c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 }
 
+type NetPacket struct {
+}
+
 func (c *Client) readPump() {
   defer func() {
-    c.hub.unregister <- c
+    c.Hub.unregister <- c
     c.conn.Close()
   }()
   c.setBase()
@@ -61,7 +61,7 @@ func (c *Client) readPump() {
       log.Error(err)
       break
     } else {
-      s, err := c.hub.invoking.GetHandler(userLoad.ServiceCode)
+      s, err := c.Hub.invoking.GetHandler(userLoad.ServiceCode)
       if err != nil {
         log.Error(err)
         break
@@ -71,23 +71,22 @@ func (c *Client) readPump() {
         log.Error(err)
         break
       }
-      rsp, err := s.handler(context.TODO(), c.userId, req)
+      rsp, id, err := s.handler(c, req)
       if err != nil {
         log.Error(err)
         break
       }
-      Broadcast(&msg.WsPacket{
+      broadcast(&msg.WsPacket{
         ServiceCode: userLoad.ServiceCode,
         Payload:     helper.Marshal2Bytes(rsp),
         Message:     &msg.Message{},
-        Id:          userLoad.Id,
-      }, c.hub)
+        Id:          id,
+      }, c.Hub)
     }
   }
 }
 
-//todo: 广播给所有人
-func Broadcast(msg *msg.WsPacket, hub *Hub) {
+func broadcast(msg *msg.WsPacket, hub *WsHub) {
   hub.broadcast <- msg
 }
 
@@ -123,7 +122,9 @@ func (c *Client) writePump() {
   }
 }
 
-func WSUpgrade(hub *Hub, userId string, w http.ResponseWriter, r *http.Request) {
+var gExistErr = []byte(`exist!`)
+
+func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request) {
   client, ok := search(hub, userId)
   if !ok {
     conn, err := gUpGrader.Upgrade(w, r, nil)
@@ -132,33 +133,22 @@ func WSUpgrade(hub *Hub, userId string, w http.ResponseWriter, r *http.Request) 
       return
     }
     client = &Client{
-      userId: userId,
-      hub:    hub,
+      UserId: userId,
+      Hub:    hub,
       conn:   conn,
       send:   make(chan *msg.WsPacket),
     }
-    client.hub.register <- client
+    client.Hub.register <- client
 
     go client.writePump()
     go client.readPump()
-  }
-}
-
-var gConnectErr = []byte(`connect timeout!`)
-
-func WSCreateRoom(hub *Hub, userId string, w http.ResponseWriter, r *http.Request) {
-  client, ok := search(hub, userId)
-  if !ok {
-    w.Write(gConnectErr)
     return
   }
-  client.wid = strconv.FormatInt(time.Now().Unix(), 64) + "." + xid.New().String()
-  client.hub.broadcastList.Store(client.wid, []string{userId})
-  w.Write(helper.String2Byte(client.wid))
+  w.Write(gExistErr)
 }
 
-func search(hub *Hub, userId string) (*Client, bool) {
-  v, ok := hub.clients.Load(userId)
+func search(hub *WsHub, userId string) (*Client, bool) {
+  v, ok := hub.Clients.Load(userId)
   if ok {
     return v.(*Client), ok
   }
@@ -166,22 +156,24 @@ func search(hub *Hub, userId string) (*Client, bool) {
 }
 
 type Client struct {
-  userId string
-  wid    string
-  hub    *Hub
+  UserId string
+  WsId   string
+  Hub    *WsHub
   conn   *websocket.Conn
   send   chan *msg.WsPacket
 }
 
-type Hub struct {
-  lock          *sync.Mutex
-  maxIdl        int
-  clients       *sync.Map
-  register      chan *Client
-  unregister    chan *Client
-  broadcast     chan *msg.WsPacket
-  broadcastList *sync.Map
-  invoking      *Invoking
+type WsHub struct {
+  Clients *sync.Map
+
+  BroadcastList *sync.Map
+
+  lock       *sync.Mutex
+  maxIdl     int
+  register   chan *Client
+  unregister chan *Client
+  broadcast  chan *msg.WsPacket
+  invoking   *Invoking
 }
 
 type Invoking struct {
@@ -193,9 +185,11 @@ type SchedulerHandler struct {
   handler     Endpoint
 }
 
-type Endpoint func(ctx context.Context, userId string, req interface{}) (rsp interface{}, err error)
+type Endpoint func(
+  client *Client,
+  req interface{}) (rsp interface{}, wsId string, err error)
 
-func (h *Hub) RegisterEndpoint(serviceCode uint32, req proto.Message, endpoint Endpoint) {
+func (h *WsHub) RegisterEndpoint(serviceCode uint32, req proto.Message, endpoint Endpoint) {
   h.lock.Lock()
   if _, ok := h.invoking.Scheduler[serviceCode]; ok {
     panic("handler is already register")
@@ -216,13 +210,13 @@ func (i *Invoking) GetHandler(serviceCode uint32) (handler *SchedulerHandler, er
   return
 }
 
-var GHub *Hub
+var GHub *WsHub
 
 func SetupWEBSocketHub(maxIdl int) {
-  GHub = &Hub{
+  GHub = &WsHub{
     lock:          new(sync.Mutex),
-    clients:       new(sync.Map),
-    broadcastList: new(sync.Map),
+    Clients:       new(sync.Map),
+    BroadcastList: new(sync.Map),
     register:      make(chan *Client, maxIdl),
     unregister:    make(chan *Client),
     broadcast:     make(chan *msg.WsPacket),
@@ -232,21 +226,21 @@ func SetupWEBSocketHub(maxIdl int) {
   go GHub.Run()
 }
 
-func (h *Hub) Run() {
+func (h *WsHub) Run() {
   h.lock.Lock()
   for {
     select {
     case client := <-h.register:
-      h.clients.Store(client.userId, client)
+      h.Clients.Store(client.UserId, client)
     case client := <-h.unregister:
-      if _, ok := h.clients.Load(client.userId); ok {
-        h.clients.Delete(client.userId)
+      if _, ok := h.Clients.Load(client.UserId); ok {
+        h.Clients.Delete(client.UserId)
         close(client.send)
       }
     case packet := <-h.broadcast:
-      if id, ok := h.broadcastList.Load(packet.Id); ok {
+      if id, ok := h.BroadcastList.Load(packet.Id); ok {
         for _, v := range id.([]string) {
-          if cnn, ok := h.clients.Load(v); ok {
+          if cnn, ok := h.Clients.Load(v); ok {
             cnn.(*Client).send <- packet
           }
         }

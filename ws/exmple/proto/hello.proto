@@ -3,14 +3,34 @@ syntax = "proto3";
 package hello;
 
 import "github.com/jinbanglin/micro/message/message.proto";
-//传递的消息结构体
+
+//3
 message HelloReq {
-  string hello=1;
+    string hello = 1;
+    string ws_id=2;
 }
 
-message HelloRsp{
-  msg.Message message=1;
-  string world=2;
+message HelloRsp {
+    msg.Message message = 1;
+    string world = 2;
+}
+
+//1
+message CreateRoomReq {
+}
+
+message CreateRoomRsp {
+    msg.Message message = 1;
+    string ws_id = 2;
+}
+
+//2
+message EntryRoomReq {
+    string ws_id = 1;
+}
+
+message EntryRoomRsp {
+    msg.Message message = 1;
 }
 
 //protoc --proto_path=${GOPATH}/src:. --gogofast_out=plugins=micro:. *.proto
