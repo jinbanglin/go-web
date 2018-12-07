@@ -74,7 +74,7 @@ func (c *Client) readPump() {
       log.Error(err)
       break
     }
-    rsp, id, err := s.handler(c, req)
+    rsp, err := s.handler(c, req)
     if err != nil {
       log.Error(err)
       break
@@ -82,7 +82,7 @@ func (c *Client) readPump() {
     netPacket := bytebufferpool.Get()
     netPacket.Write(packet[0:serviceCodeSize])
     netPacket.Write(helper.Marshal2Bytes(rsp))
-    broadcast(&broadcastData{id: id, userId: c.UserId, data: netPacket}, c.Hub)
+    broadcast(&broadcastData{id: c.WsId, userId: c.UserId, data: netPacket}, c.Hub)
   }
 }
 
@@ -191,7 +191,7 @@ type SchedulerHandler struct {
 
 type Endpoint func(
   client *Client,
-  req interface{}) (rsp interface{}, wsId string, err error)
+  req interface{}) (rsp interface{}, err error)
 
 func (h *WsHub) RegisterEndpoint(serviceCode string, req proto.Message, endpoint Endpoint) {
   h.lock.Lock()
@@ -221,6 +221,7 @@ var GHub *WsHub
 
 func SetupWEBSocketHub(maxIdl int) {
   GHub = &WsHub{
+    broadcastWay:  1,
     lock:          new(sync.Mutex),
     Clients:       new(sync.Map),
     BroadcastList: new(sync.Map),
@@ -248,10 +249,9 @@ func (h *WsHub) Run() {
       var result []string
       if h.broadcastWay == 1 {
         b, err := helper.GRedisRing.Get(packet.id).Bytes()
-        if err != nil {
-          return
+        if err == nil {
+          json.Unmarshal(b, result)
         }
-        json.Unmarshal(b, result)
       } else {
         if id, ok := h.BroadcastList.Load(packet.id); ok {
           result = id.([]string)

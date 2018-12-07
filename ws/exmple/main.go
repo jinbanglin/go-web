@@ -30,10 +30,10 @@ func main() {
   }
   app := gin.Default()
   ws.SetupWEBSocketHub(1024)
-  ws.GHub.RegisterEndpoint("1", &hello.HelloReq{}, hello_world.Hello)
-  ws.GHub.RegisterEndpoint("2", &hello.CreateRoomReq{}, hello_world.CreateRoom)
-  ws.GHub.RegisterEndpoint("3", &hello.EntryRoomReq{}, hello_world.EntryRoom)
-  ws.GHub.RegisterEndpoint("4", &hello.EntryRoomReq{}, hello_world.EntryRoomRedis)
+  ws.GHub.RegisterEndpoint("10000", &hello.HelloReq{}, hello_world.Hello)
+  ws.GHub.RegisterEndpoint("10001", &hello.CreateRoomReq{}, hello_world.CreateRoom)
+  ws.GHub.RegisterEndpoint("10002", &hello.EntryRoomReq{}, hello_world.EntryRoom)
+  ws.GHub.RegisterEndpoint("10003", &hello.EntryRoomReq{}, hello_world.EntryRoomRedis)
 
   app.POST("/ws/:userid", func(context *gin.Context) {
     ws.WSUpgrade(ws.GHub, context.Param("userid"), context.Writer, context.Request)

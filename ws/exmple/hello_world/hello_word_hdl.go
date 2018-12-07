@@ -9,20 +9,19 @@ import (
   "github.com/rs/xid"
   "sync"
   "github.com/jinbanglin/helper"
-  "github.com/go-redis/redis"
   "encoding/json"
 )
 
-func Hello(client *ws.Client, req interface{}) (rsp interface{}, wsId string, err error) {
+func Hello(client *ws.Client, req interface{}) (rsp interface{}, err error) {
   userLoad, sendPacket := req.(*hello.HelloReq), &hello.HelloRsp{Message: &msg.Message{
     Code: 200,
     Msg:  "SUCCESS",
   }, World: "world"}
   sendPacket.World += userLoad.Hello
-  return sendPacket, userLoad.WsId, nil
+  return sendPacket, nil
 }
 
-func CreateRoom(client *ws.Client, req interface{}) (rsp interface{}, wsId string, err error) {
+func CreateRoom(client *ws.Client, req interface{}) (rsp interface{}, err error) {
   client.WsId = strconv.FormatInt(time.Now().Unix(), 10) + "." + xid.New().String()
   client.Hub.Clients.Store(client.UserId, client)
   client.Hub.BroadcastList.Store(client.WsId, []string{client.UserId})
@@ -32,12 +31,12 @@ func CreateRoom(client *ws.Client, req interface{}) (rsp interface{}, wsId strin
       Msg:  "SUCCESS",
     },
     WsId: client.WsId,
-  }, client.WsId, nil
+  }, nil
 }
 
 var lock = new(sync.RWMutex)
 
-func EntryRoom(client *ws.Client, req interface{}) (rsp interface{}, wsId string, err error) {
+func EntryRoom(client *ws.Client, req interface{}) (rsp interface{}, err error) {
   userLoad, sendPacket := req.(*hello.EntryRoomReq), &hello.EntryRoomRsp{}
   lock.Lock()
   defer lock.Unlock()
@@ -48,27 +47,27 @@ func EntryRoom(client *ws.Client, req interface{}) (rsp interface{}, wsId string
     Code: 200,
     Msg:  "SUCCESS",
   }
-  return
+  return sendPacket, nil
 }
 
-func EntryRoomRedis(client *ws.Client, req interface{}) (rsp interface{}, wsId string, err error) {
+func EntryRoomRedis(client *ws.Client, req interface{}) (rsp interface{}, err error) {
   userLoad, sendPacket := req.(*hello.EntryRoomReq), &hello.EntryRoomRsp{}
-  helper.GRedisRing.Pipelined(func(pipeliner redis.Pipeliner) error {
-    b, err := pipeliner.Get(userLoad.WsId).Bytes()
-    if err != nil {
-      sendPacket.Message = &msg.Message{
-        Code: 500,
-        Msg:  "FAIL",
-      }
+  lock := helper.NewDLock(userLoad.WsId, time.Second*3)
+  lock.Lock()
+  defer lock.Unlock()
+  b, err := helper.GRedisRing.Get(userLoad.WsId).Bytes()
+  if err != nil {
+    sendPacket.Message = &msg.Message{
+      Code: 400,
+      Msg:  "FAIL",
     }
-    var result []string
-    json.Unmarshal(b, &result)
-    pipeliner.Set(userLoad.WsId, helper.Marshal2Bytes(append(result, client.UserId)), time.Hour*24)
-    return nil
-  })
+  }
+  var result []string
+  json.Unmarshal(b, &result)
+  helper.GRedisRing.Set(userLoad.WsId, append(result, client.UserId), time.Hour*24)
   sendPacket.Message = &msg.Message{
     Code: 200,
     Msg:  "SUCCESS",
   }
-  return
+  return sendPacket, nil
 }
