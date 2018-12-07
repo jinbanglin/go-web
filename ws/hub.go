@@ -165,12 +165,13 @@ type WsHub struct {
 
   BroadcastList *sync.Map
 
-  lock       *sync.Mutex
-  maxIdl     int
-  register   chan *Client
-  unregister chan *Client
-  broadcast  chan *broadcastData
-  invoking   *Invoking
+  broadcastWay int
+  lock         *sync.Mutex
+  maxIdl       int
+  register     chan *Client
+  unregister   chan *Client
+  broadcast    chan *broadcastData
+  invoking     *Invoking
 }
 
 type broadcastData struct {
@@ -244,8 +245,20 @@ func (h *WsHub) Run() {
         h.Clients.Delete(client.UserId)
       }
     case packet := <-h.broadcast:
-      if id, ok := h.BroadcastList.Load(packet.id); ok && len(id.([]string)) > 0 {
-        for _, v := range id.([]string) {
+      var result []string
+      if h.broadcastWay == 1 {
+        b, err := helper.GRedisRing.Get(packet.id).Bytes()
+        if err != nil {
+          return
+        }
+        json.Unmarshal(b, result)
+      } else {
+        if id, ok := h.BroadcastList.Load(packet.id); ok {
+          result = id.([]string)
+        }
+      }
+      if len(result) > 0 {
+        for _, v := range result {
           if cnn, ok := h.Clients.Load(v); ok {
             cnn.(*Client).send <- packet.data
           }

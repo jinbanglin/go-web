@@ -33,6 +33,7 @@ func main() {
   ws.GHub.RegisterEndpoint("1", &hello.HelloReq{}, hello_world.Hello)
   ws.GHub.RegisterEndpoint("2", &hello.CreateRoomReq{}, hello_world.CreateRoom)
   ws.GHub.RegisterEndpoint("3", &hello.EntryRoomReq{}, hello_world.EntryRoom)
+  ws.GHub.RegisterEndpoint("4", &hello.EntryRoomReq{}, hello_world.EntryRoomRedis)
 
   app.POST("/ws/:userid", func(context *gin.Context) {
     ws.WSUpgrade(ws.GHub, context.Param("userid"), context.Writer, context.Request)

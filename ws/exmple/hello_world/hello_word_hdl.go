@@ -8,6 +8,9 @@ import (
   "time"
   "github.com/rs/xid"
   "sync"
+  "github.com/jinbanglin/helper"
+  "github.com/go-redis/redis"
+  "encoding/json"
 )
 
 func Hello(client *ws.Client, req interface{}) (rsp interface{}, wsId string, err error) {
@@ -38,6 +41,31 @@ func EntryRoom(client *ws.Client, req interface{}) (rsp interface{}, wsId string
   userLoad, sendPacket := req.(*hello.EntryRoomReq), &hello.EntryRoomRsp{}
   lock.Lock()
   defer lock.Unlock()
+  if wsId, ok := client.Hub.BroadcastList.Load(userLoad.WsId); ok {
+    client.Hub.BroadcastList.Store(userLoad.WsId, append(wsId.([]string), client.UserId))
+  }
+  sendPacket.Message = &msg.Message{
+    Code: 200,
+    Msg:  "SUCCESS",
+  }
+  return
+}
+
+func EntryRoomRedis(client *ws.Client, req interface{}) (rsp interface{}, wsId string, err error) {
+  userLoad, sendPacket := req.(*hello.EntryRoomReq), &hello.EntryRoomRsp{}
+  helper.GRedisRing.Pipelined(func(pipeliner redis.Pipeliner) error {
+    b, err := pipeliner.Get(userLoad.WsId).Bytes()
+    if err != nil {
+      sendPacket.Message = &msg.Message{
+        Code: 500,
+        Msg:  "FAIL",
+      }
+    }
+    var result []string
+    json.Unmarshal(b, &result)
+    pipeliner.Set(userLoad.WsId, helper.Marshal2Bytes(append(result, client.UserId)), time.Hour*24)
+    return nil
+  })
   if wsId, ok := client.Hub.BroadcastList.Load(userLoad.WsId); ok {
     client.Hub.BroadcastList.Store(userLoad.WsId, append(wsId.([]string), client.UserId))
   }
