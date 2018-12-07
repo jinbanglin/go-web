@@ -10,8 +10,8 @@ import (
   "github.com/jinbanglin/log"
   "github.com/gorilla/websocket"
   "github.com/jinbanglin/helper"
-  "github.com/jinbanglin/micro/message"
   "encoding/json"
+  "github.com/jinbanglin/bytebufferpool"
 )
 
 const (
@@ -52,44 +52,37 @@ func (c *Client) readPump() {
   }()
   c.setBase()
   for {
-    _, packet, err := c.conn.ReadMessage()
+    t, packet, err := c.conn.ReadMessage()
     if err != nil {
       if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-        log.Error(err, )
+        log.Error(err, t)
       }
       break
     }
-    userLoad := &msg.WsPacket{}
-    if err = json.Unmarshal(packet, userLoad); err != nil {
+    serviceCode := helper.Byte2String(packet[0:1])
+    s, err := c.Hub.invoking.GetHandler(serviceCode)
+    if err != nil {
       log.Error(err)
       break
-    } else {
-      s, err := c.Hub.invoking.GetHandler(userLoad.ServiceCode)
-      if err != nil {
-        log.Error(err)
-        break
-      }
-      req := reflect.New(s.RequestType).Interface().(proto.Message)
-      if err = json.Unmarshal(userLoad.Payload, req); err != nil {
-        log.Error(err)
-        break
-      }
-      rsp, id, err := s.handler(c, req)
-      if err != nil {
-        log.Error(err)
-        break
-      }
-      broadcast(&msg.WsPacket{
-        ServiceCode: userLoad.ServiceCode,
-        Payload:     helper.Marshal2Bytes(rsp),
-        Message:     &msg.Message{},
-        Id:          id,
-      }, c.Hub)
     }
+    req := reflect.New(s.RequestType).Interface().(proto.Message)
+    if err = json.Unmarshal(packet[1:], req); err != nil {
+      log.Error(err)
+      break
+    }
+    rsp, id, err := s.handler(c, req)
+    if err != nil {
+      log.Error(err)
+      break
+    }
+    netPacket := bytebufferpool.Get()
+    netPacket.Write(packet[0:1])
+    netPacket.Write(helper.Marshal2Bytes(rsp))
+    broadcast(&broadcastData{id: id, userId: c.UserId, data: netPacket}, c.Hub)
   }
 }
 
-func broadcast(msg *msg.WsPacket, hub *WsHub) {
+func broadcast(msg *broadcastData, hub *WsHub) {
   hub.broadcast <- msg
 }
 
@@ -111,11 +104,12 @@ func (c *Client) writePump() {
       if err != nil {
         return
       }
-      w.Write(helper.Marshal2Bytes(packet))
+      w.Write(packet.Bytes())
       if err := w.Close(); err != nil {
         log.Error(err)
         return
       }
+      packet.Release()
     case <-ticker.C:
       c.conn.SetWriteDeadline(time.Now().Add(writeWait))
       if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -137,7 +131,7 @@ func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request
       UserId: userId,
       Hub:    hub,
       conn:   conn,
-      send:   make(chan *msg.WsPacket),
+      send:   make(chan *bytebufferpool.ByteBuffer),
     }
     client.Hub.register <- client
 
@@ -159,7 +153,7 @@ type Client struct {
   WsId   string
   Hub    *WsHub
   conn   *websocket.Conn
-  send   chan *msg.WsPacket
+  send   chan *bytebufferpool.ByteBuffer
 }
 
 type WsHub struct {
@@ -171,12 +165,18 @@ type WsHub struct {
   maxIdl     int
   register   chan *Client
   unregister chan *Client
-  broadcast  chan *msg.WsPacket
+  broadcast  chan *broadcastData
   invoking   *Invoking
 }
 
+type broadcastData struct {
+  id     string
+  userId string
+  data   *bytebufferpool.ByteBuffer
+}
+
 type Invoking struct {
-  Scheduler map[uint32]*SchedulerHandler
+  Scheduler map[string]*SchedulerHandler
 }
 
 type SchedulerHandler struct {
@@ -188,7 +188,7 @@ type Endpoint func(
   client *Client,
   req interface{}) (rsp interface{}, wsId string, err error)
 
-func (h *WsHub) RegisterEndpoint(serviceCode uint32, req proto.Message, endpoint Endpoint) {
+func (h *WsHub) RegisterEndpoint(serviceCode string, req proto.Message, endpoint Endpoint) {
   h.lock.Lock()
   if _, ok := h.invoking.Scheduler[serviceCode]; ok {
     panic("handler is already register")
@@ -200,7 +200,7 @@ func (h *WsHub) RegisterEndpoint(serviceCode uint32, req proto.Message, endpoint
   h.lock.Unlock()
 }
 
-func (i *Invoking) GetHandler(serviceCode uint32) (handler *SchedulerHandler, err error) {
+func (i *Invoking) GetHandler(serviceCode string) (handler *SchedulerHandler, err error) {
   var ok bool
   if handler, ok = i.Scheduler[serviceCode]; !ok {
     log.Error(" |no service code=", serviceCode)
@@ -218,9 +218,9 @@ func SetupWEBSocketHub(maxIdl int) {
     BroadcastList: new(sync.Map),
     register:      make(chan *Client, maxIdl),
     unregister:    make(chan *Client),
-    broadcast:     make(chan *msg.WsPacket),
+    broadcast:     make(chan *broadcastData),
     maxIdl:        maxIdl,
-    invoking:      &Invoking{Scheduler: make(map[uint32]*SchedulerHandler)},
+    invoking:      &Invoking{Scheduler: make(map[string]*SchedulerHandler)},
   }
   go GHub.Run()
 }
@@ -233,15 +233,19 @@ func (h *WsHub) Run() {
       h.Clients.Store(client.UserId, client)
     case client := <-h.unregister:
       if _, ok := h.Clients.Load(client.UserId); ok {
-        h.Clients.Delete(client.UserId)
         close(client.send)
+        h.Clients.Delete(client.UserId)
       }
     case packet := <-h.broadcast:
-      if id, ok := h.BroadcastList.Load(packet.Id); ok {
+      if id, ok := h.BroadcastList.Load(packet.id); ok && len(id.([]string)) > 0 {
         for _, v := range id.([]string) {
           if cnn, ok := h.Clients.Load(v); ok {
-            cnn.(*Client).send <- packet
+            cnn.(*Client).send <- packet.data
           }
+        }
+      } else {
+        if cnn, ok := h.Clients.Load(packet.userId); ok {
+          cnn.(*Client).send <- packet.data
         }
       }
     }

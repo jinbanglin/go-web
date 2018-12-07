@@ -20,7 +20,7 @@ func Hello(client *ws.Client, req interface{}) (rsp interface{}, wsId string, er
 }
 
 func CreateRoom(client *ws.Client, req interface{}) (rsp interface{}, wsId string, err error) {
-  client.WsId = strconv.FormatInt(time.Now().Unix(), 64) + "." + xid.New().String()
+  client.WsId = strconv.FormatInt(time.Now().Unix(), 10) + "." + xid.New().String()
   client.Hub.Clients.Store(client.UserId, client)
   client.Hub.BroadcastList.Store(client.WsId, []string{client.UserId})
   return &hello.CreateRoomRsp{
