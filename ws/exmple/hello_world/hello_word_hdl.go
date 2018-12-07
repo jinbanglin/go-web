@@ -66,9 +66,6 @@ func EntryRoomRedis(client *ws.Client, req interface{}) (rsp interface{}, wsId s
     pipeliner.Set(userLoad.WsId, helper.Marshal2Bytes(append(result, client.UserId)), time.Hour*24)
     return nil
   })
-  if wsId, ok := client.Hub.BroadcastList.Load(userLoad.WsId); ok {
-    client.Hub.BroadcastList.Store(userLoad.WsId, append(wsId.([]string), client.UserId))
-  }
   sendPacket.Message = &msg.Message{
     Code: 200,
     Msg:  "SUCCESS",
