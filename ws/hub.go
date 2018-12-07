@@ -12,6 +12,7 @@ import (
   "github.com/jinbanglin/helper"
   "encoding/json"
   "github.com/jinbanglin/bytebufferpool"
+  "fmt"
 )
 
 const (
@@ -26,6 +27,9 @@ const (
 
   // Maximum message size allowed from peer.
   maxMessageSize = 512
+
+  // service code size
+  serviceCodeSize = 5
 )
 
 var gUpGrader = websocket.Upgrader{
@@ -59,14 +63,14 @@ func (c *Client) readPump() {
       }
       break
     }
-    serviceCode := helper.Byte2String(packet[0:1])
+    serviceCode := helper.Byte2String(packet[0:serviceCodeSize])
     s, err := c.Hub.invoking.GetHandler(serviceCode)
     if err != nil {
       log.Error(err)
       break
     }
     req := reflect.New(s.RequestType).Interface().(proto.Message)
-    if err = json.Unmarshal(packet[1:], req); err != nil {
+    if err = json.Unmarshal(packet[serviceCodeSize:], req); err != nil {
       log.Error(err)
       break
     }
@@ -76,7 +80,7 @@ func (c *Client) readPump() {
       break
     }
     netPacket := bytebufferpool.Get()
-    netPacket.Write(packet[0:1])
+    netPacket.Write(packet[0:serviceCodeSize])
     netPacket.Write(helper.Marshal2Bytes(rsp))
     broadcast(&broadcastData{id: id, userId: c.UserId, data: netPacket}, c.Hub)
   }
@@ -190,6 +194,9 @@ type Endpoint func(
 
 func (h *WsHub) RegisterEndpoint(serviceCode string, req proto.Message, endpoint Endpoint) {
   h.lock.Lock()
+  if len(serviceCode) != serviceCodeSize {
+    panic(fmt.Sprintf("service code is must be %d,but %s\n", serviceCodeSize, serviceCode))
+  }
   if _, ok := h.invoking.Scheduler[serviceCode]; ok {
     panic("handler is already register")
   }
