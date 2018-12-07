@@ -10,6 +10,7 @@ import (
   "sync"
   "github.com/jinbanglin/helper"
   "encoding/json"
+  "strings"
 )
 
 func Hello(client *ws.Client, req interface{}) (rsp interface{}, err error) {
@@ -64,7 +65,23 @@ func EntryRoomRedis(client *ws.Client, req interface{}) (rsp interface{}, err er
   }
   var result []string
   json.Unmarshal(b, &result)
-  helper.GRedisRing.Set(userLoad.WsId, append(result, client.UserId), time.Hour*24)
+  var isExist bool
+  for _, v := range result {
+    if strings.EqualFold(v, client.UserId) {
+      isExist = true
+      sendPacket.Message = &msg.Message{
+        Code: 400,
+        Msg:  "EXIST",
+      }
+      return sendPacket, nil
+    }
+  }
+  if !isExist {
+    client.WsId = userLoad.WsId
+    client.Hub.Clients.Store(client.UserId, client)
+    result = append(result, client.UserId)
+    helper.GRedisRing.Set(userLoad.WsId, helper.Marshal2Bytes(&result), time.Hour*24)
+  }
   sendPacket.Message = &msg.Message{
     Code: 200,
     Msg:  "SUCCESS",

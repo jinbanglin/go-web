@@ -13,6 +13,7 @@ import (
   "encoding/json"
   "github.com/jinbanglin/bytebufferpool"
   "fmt"
+  "bytes"
 )
 
 const (
@@ -46,8 +47,7 @@ func (c *Client) setBase() {
   c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 }
 
-type NetPacket struct {
-}
+var pool bytebufferpool.Pool
 
 func (c *Client) readPump() {
   defer func() {
@@ -79,11 +79,16 @@ func (c *Client) readPump() {
       log.Error(err)
       break
     }
-    netPacket := bytebufferpool.Get()
-    netPacket.Write(packet[0:serviceCodeSize])
-    netPacket.Write(helper.Marshal2Bytes(rsp))
-    broadcast(&broadcastData{id: c.WsId, userId: c.UserId, data: netPacket}, c.Hub)
+    broadcast(&broadcastData{
+      id:     c.WsId,
+      userId: c.UserId,
+      data:   BytesCombine(packet[0:serviceCodeSize], helper.Marshal2Bytes(rsp)),
+    }, c.Hub)
   }
+}
+
+func BytesCombine(pBytes ...[]byte) []byte {
+  return bytes.Join(pBytes, []byte(""))
 }
 
 func broadcast(msg *broadcastData, hub *WsHub) {
@@ -108,12 +113,11 @@ func (c *Client) writePump() {
       if err != nil {
         return
       }
-      w.Write(packet.Bytes())
+      w.Write(packet)
       if err := w.Close(); err != nil {
         log.Error(err)
         return
       }
-      packet.Release()
     case <-ticker.C:
       c.conn.SetWriteDeadline(time.Now().Add(writeWait))
       if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -135,7 +139,7 @@ func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request
       UserId: userId,
       Hub:    hub,
       conn:   conn,
-      send:   make(chan *bytebufferpool.ByteBuffer),
+      send:   make(chan []byte),
     }
     client.Hub.register <- client
 
@@ -157,7 +161,7 @@ type Client struct {
   WsId   string
   Hub    *WsHub
   conn   *websocket.Conn
-  send   chan *bytebufferpool.ByteBuffer
+  send   chan []byte
 }
 
 type WsHub struct {
@@ -177,7 +181,7 @@ type WsHub struct {
 type broadcastData struct {
   id     string
   userId string
-  data   *bytebufferpool.ByteBuffer
+  data   []byte
 }
 
 type Invoking struct {
@@ -250,7 +254,7 @@ func (h *WsHub) Run() {
       if h.broadcastWay == 1 {
         b, err := helper.GRedisRing.Get(packet.id).Bytes()
         if err == nil {
-          json.Unmarshal(b, result)
+          json.Unmarshal(b, &result)
         }
       } else {
         if id, ok := h.BroadcastList.Load(packet.id); ok {
