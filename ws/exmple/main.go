@@ -29,7 +29,7 @@ func main() {
     log.Fatal("Init", err)
   }
   app := gin.Default()
-  ws.SetupWEBSocketHub(1024)
+  ws.SetupWEBSocketHub(1024,1)
   ws.GHub.RegisterEndpoint("10000", &hello.HelloReq{}, hello_world.Hello)
   ws.GHub.RegisterEndpoint("10001", &hello.CreateRoomReq{}, hello_world.CreateRoom)
   ws.GHub.RegisterEndpoint("10002", &hello.EntryRoomReq{}, hello_world.EntryRoom)

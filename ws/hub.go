@@ -11,9 +11,9 @@ import (
   "github.com/gorilla/websocket"
   "github.com/jinbanglin/helper"
   "encoding/json"
-  "github.com/jinbanglin/bytebufferpool"
   "fmt"
   "bytes"
+  "github.com/alex023/clock"
 )
 
 const (
@@ -46,8 +46,6 @@ func (c *Client) setBase() {
   c.conn.SetReadDeadline(time.Now().Add(pongWait))
   c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 }
-
-var pool bytebufferpool.Pool
 
 func (c *Client) readPump() {
   defer func() {
@@ -96,9 +94,13 @@ func broadcast(msg *broadcastData, hub *WsHub) {
 }
 
 func (c *Client) writePump() {
-  ticker := time.NewTicker(pingPeriod)
+  c.Hub.clock.AddJobRepeat(pingPeriod, 0, func() {
+    c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+    if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+      return
+    }
+  })
   defer func() {
-    ticker.Stop()
     c.conn.Close()
   }()
   for {
@@ -116,11 +118,6 @@ func (c *Client) writePump() {
       w.Write(packet)
       if err := w.Close(); err != nil {
         log.Error(err)
-        return
-      }
-    case <-ticker.C:
-      c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-      if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
         return
       }
     }
@@ -176,6 +173,8 @@ type WsHub struct {
   unregister   chan *Client
   broadcast    chan *broadcastData
   invoking     *Invoking
+
+  clock *clock.Clock
 }
 
 type broadcastData struct {
@@ -223,9 +222,9 @@ func (i *Invoking) GetHandler(serviceCode string) (handler *SchedulerHandler, er
 
 var GHub *WsHub
 
-func SetupWEBSocketHub(maxIdl int) {
+func SetupWEBSocketHub(maxIdl, broadcastWay int) {
   GHub = &WsHub{
-    broadcastWay:  1,
+    broadcastWay:  broadcastWay,
     lock:          new(sync.Mutex),
     Clients:       new(sync.Map),
     BroadcastList: new(sync.Map),
@@ -234,6 +233,7 @@ func SetupWEBSocketHub(maxIdl int) {
     broadcast:     make(chan *broadcastData),
     maxIdl:        maxIdl,
     invoking:      &Invoking{Scheduler: make(map[string]*SchedulerHandler)},
+    clock:         clock.NewClock(),
   }
   go GHub.Run()
 }
