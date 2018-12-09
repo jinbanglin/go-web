@@ -18,19 +18,19 @@ import (
 
 const (
   // Time allowed to write a message to the peer.
-  writeWait = 10 * time.Second
+  WriteWait = 10 * time.Second
 
   // Time allowed to read the next pong message from the peer.
-  pongWait = 60 * time.Second
+  PongWait = 60 * time.Second
 
-  // send pings to peer with this period. Must be less than pongWait.
-  pingPeriod = (pongWait * 9) / 10
+  // send pings to peer with this period. Must be less than PongWait.
+  PingPeriod = (PongWait * 9) / 10
 
   // Maximum message size allowed from peer.
-  maxMessageSize = 512
+  MaxMessageSize = 512
 
   // service code size
-  serviceCodeSize = 5
+  ServiceCodeSize = 5
 )
 
 var gUpGrader = websocket.Upgrader{
@@ -42,9 +42,9 @@ var gUpGrader = websocket.Upgrader{
 }
 
 func (c *Client) setBase() {
-  c.conn.SetReadLimit(maxMessageSize)
-  c.conn.SetReadDeadline(time.Now().Add(pongWait))
-  c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+  c.conn.SetReadLimit(MaxMessageSize)
+  c.conn.SetReadDeadline(time.Now().Add(PongWait))
+  c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(PongWait)); return nil })
 }
 
 func (c *Client) readPump() {
@@ -61,14 +61,14 @@ func (c *Client) readPump() {
       }
       break
     }
-    serviceCode := helper.Byte2String(packet[0:serviceCodeSize])
+    serviceCode := helper.Byte2String(packet[0:ServiceCodeSize])
     s, err := c.Hub.invoking.GetHandler(serviceCode)
     if err != nil {
       log.Error(err)
       break
     }
     req := reflect.New(s.RequestType).Interface().(proto.Message)
-    if err = json.Unmarshal(packet[serviceCodeSize:], req); err != nil {
+    if err = json.Unmarshal(packet[ServiceCodeSize:], req); err != nil {
       log.Error(err)
       break
     }
@@ -80,7 +80,7 @@ func (c *Client) readPump() {
     broadcast(&broadcastData{
       id:     c.WsId,
       userId: c.UserId,
-      data:   BytesCombine(packet[0:serviceCodeSize], helper.Marshal2Bytes(rsp)),
+      data:   BytesCombine(packet[0:ServiceCodeSize], helper.Marshal2Bytes(rsp)),
     }, c.Hub)
   }
 }
@@ -94,8 +94,8 @@ func broadcast(msg *broadcastData, hub *WsHub) {
 }
 
 func (c *Client) writePump() {
-  c.Hub.clock.AddJobRepeat(pingPeriod, 0, func() {
-    c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+  c.Hub.clock.AddJobRepeat(PingPeriod, 0, func() {
+    c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
     if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
       return
     }
@@ -106,7 +106,7 @@ func (c *Client) writePump() {
   for {
     select {
     case packet, ok := <-c.send:
-      c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+      c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
       if !ok {
         c.conn.WriteMessage(websocket.CloseMessage, []byte{})
         return
@@ -198,8 +198,8 @@ type Endpoint func(
 
 func (h *WsHub) RegisterEndpoint(serviceCode string, req proto.Message, endpoint Endpoint) {
   h.lock.Lock()
-  if len(serviceCode) != serviceCodeSize {
-    panic(fmt.Sprintf("service code is must be %d,but %s\n", serviceCodeSize, serviceCode))
+  if len(serviceCode) != ServiceCodeSize {
+    panic(fmt.Sprintf("service code is must be %d,but %s\n", ServiceCodeSize, serviceCode))
   }
   if _, ok := h.invoking.Scheduler[serviceCode]; ok {
     panic("handler is already register")
