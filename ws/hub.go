@@ -140,14 +140,17 @@ func (c *Client) writePump() {
   }
 }
 
+var upgradeError = []byte(`50001{"message":{"code":500,"msg":"upgrade websocket fail"}}`)
+
 func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request) {
   client, ok := Search(hub, userId)
   if ok {
-
+    client.exit()
   }
   conn, err := gUpGrader.Upgrade(w, r, nil)
   if err != nil {
     log.Error(err)
+    w.Write(upgradeError)
     return
   }
   client = &Client{
@@ -295,6 +298,13 @@ func (h *WsHub) Run() {
   h.lock.Unlock()
 }
 
+var exitMsg = []byte(`10001{"message":{"code":200,"msg":"SUCCESS"}}`)
+
+func (c *Client) exit() {
+  c.Hub.Clients.Delete(c.Cid)
+  c.send <- exitMsg
+}
+
 func (h *WsHub) redisConfig() error {
   h.ring = helper.GRedisRing
   if h.ring == nil || h.ring.Ping().Err() != nil {
@@ -322,7 +332,7 @@ func (c *Client) EntryRoom(roomId, cidNew string) error {
   lock.Lock()
   defer lock.Unlock()
 
-  if c.GetState()==1{
+  if c.GetState() == 1 {
     return nil
   }
   roomInfo, err := GHub.GetRoom(roomId)
