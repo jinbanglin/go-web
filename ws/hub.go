@@ -103,12 +103,13 @@ func (c *Client) writePump() {
   defer func() {
     c.conn.Close()
   }()
-
-  c.Hub.clock.AddJobRepeat(PingPeriod, 0, func() {
+  var clockQuit = make(chan struct{})
+  var job clock.Job
+  job, _ = c.Hub.clock.AddJobRepeat(PingPeriod, 0, func() {
     c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
     if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
       log.Debug(err)
-      return
+      clockQuit <- struct{}{}
     }
   })
   for {
@@ -117,18 +118,24 @@ func (c *Client) writePump() {
       c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
       if !ok {
         c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+        job.Cancel()
         return
       }
       w, err := c.conn.NextWriter(websocket.TextMessage)
       if err != nil {
         log.Debug(err)
+        job.Cancel()
         return
       }
       w.Write(packet)
       if err := w.Close(); err != nil {
         log.Debug(err)
+        job.Cancel()
         return
       }
+    case <-clockQuit:
+      job.Cancel()
+      return
     }
   }
 }
@@ -316,7 +323,9 @@ func (c *Client) EntryRoom(roomId, cidNew string) error {
   lock := helper.NewDLock(roomId, DsyncLockTimeExpire)
   lock.Lock()
   defer lock.Unlock()
-
+  if c.GetState() == 1 {
+    return nil
+  }
   roomInfo, err := GHub.GetRoom(roomId)
   if (err != nil && err == redis.Nil) || err == nil {
     var exist = false
@@ -343,7 +352,7 @@ func (c *Client) GetState() int32 {
 }
 
 func (c *Client) SetState() {
-  atomic.CompareAndSwapInt32(&c.State, 0, 1)
+  atomic.SwapInt32(&c.State, 1)
 }
 
 func (c *Client) resetState() {
