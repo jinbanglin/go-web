@@ -17,8 +17,7 @@ import (
   "github.com/go-redis/redis"
   "strings"
   "sync/atomic"
-  "github.com/jinbanglin/go-web/ws/room/proto"
-  "github.com/jinbanglin/go-web/ws/room/room_manager"
+  "github.com/jinbanglin/go-web/ws/proto"
 )
 
 const (
@@ -254,9 +253,9 @@ func SetupWEBSocketHub(def bool) {
     panic("please check your redis config")
   }
   if def {
-    GHub.RegisterEndpoint("10000", &room.CreateRoomReq{}, room_manager.CreateRoom)
-    GHub.RegisterEndpoint("10001", &room.EntryRoomReq{}, room_manager.EntryRoom)
-    GHub.RegisterEndpoint("10002", &room.HelloReq{}, room_manager.Hello)
+    GHub.RegisterEndpoint("10000", &room.CreateRoomReq{}, CreateRoom)
+    GHub.RegisterEndpoint("10001", &room.EntryRoomReq{}, EntryRoom)
+    GHub.RegisterEndpoint("10002", &room.HelloReq{}, Hello)
   }
   go GHub.Run()
 }
@@ -271,9 +270,7 @@ func (h *WsHub) Run() {
       if _, ok := h.Clients.Load(client.UserId); ok {
         close(client.send)
         h.Clients.Delete(client.UserId)
-        if helper.IsNotNilString(client.RoomId) {
-          client.RemoveUser(client.RoomId, client.Cid)
-        }
+        client.RemoveUser(client.RoomId, client.Cid)
       }
     case packet := <-h.broadcast:
       cids, _ := h.GetRoom(packet.roomId)
@@ -349,6 +346,10 @@ func (c *Client) SetState() {
   atomic.CompareAndSwapInt32(&c.State, 0, 1)
 }
 
+func (c *Client) resetState() {
+  atomic.CompareAndSwapInt32(&c.State, 1, 0)
+}
+
 func (c *Client) Update() {
   c.Hub.Clients.Store(c.Cid, c)
 }
@@ -365,15 +366,14 @@ func (c *Client) RemoveUser(roomId, cidOld string) {
     log.Debug(err)
     return
   }
-  var ok = false
   var index = 0
   for k, v := range cids {
     if strings.EqualFold(v, cidOld) {
-      ok = true
       index = k
       break
     }
   }
   cids = append(cids[:index], cids[index+1:]...)
   GHub.SetRoom(roomId, cids, DsyncLockTimeExpire)
+  c.resetState()
 }

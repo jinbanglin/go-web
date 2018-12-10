@@ -1,4 +1,4 @@
-package room_manager
+package ws
 
 import "github.com/jinbanglin/micro/message"
 
