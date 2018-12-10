@@ -1,0 +1,14 @@
+[redis]
+addr                  =["r-2zee214e918ae394.redis.rds.aliyuncs.com:6379"]
+heartbeatfrequency    =500
+db                    =0
+password              ="JBLjbl0219"
+maxretries            =3
+dialtimeout           =3
+readtimeout           =3
+writetimeout          =3
+poolsize              =4096
+pooltimeout           =30
+idletimeout           =500
+idlecheckfrequency    =500
+
