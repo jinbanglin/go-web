@@ -321,7 +321,7 @@ func (c *Client) EntryRoom(roomId, cidNew string) error {
   lock := helper.NewDLock(roomId, DsyncLockTimeExpire)
   lock.Lock()
   defer lock.Unlock()
-  
+
   if c.GetState()==1{
     return nil
   }
