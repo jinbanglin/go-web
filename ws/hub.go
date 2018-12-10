@@ -188,8 +188,6 @@ func (c *Client) resetCid(cid string) {
 type WsHub struct {
   Clients *sync.Map
 
-  BroadcastList *sync.Map
-
   lock       *sync.Mutex
   register   chan *Client
   unregister chan *Client
@@ -323,7 +321,8 @@ func (c *Client) EntryRoom(roomId, cidNew string) error {
   lock := helper.NewDLock(roomId, DsyncLockTimeExpire)
   lock.Lock()
   defer lock.Unlock()
-  if c.GetState() == 1 {
+  
+  if c.GetState()==1{
     return nil
   }
   roomInfo, err := GHub.GetRoom(roomId)
