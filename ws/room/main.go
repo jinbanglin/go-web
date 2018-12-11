@@ -30,7 +30,11 @@ func main() {
   ws.SetupWEBSocketHub(true)
 
   app.POST("/ws/:userid", func(context *gin.Context) {
-    ws.WSUpgrade(ws.GHub, context.Param("userid"), context.Writer, context.Request)
+    ws.WSUpgrade(
+      ws.GHub,
+      context.Param("userid"),
+      context.Writer,
+      context.Request)
   })
   if err := service.Run(); err != nil {
     log.Fatal(err)
