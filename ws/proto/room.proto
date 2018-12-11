@@ -7,9 +7,7 @@ import "github.com/jinbanglin/micro/message/message.proto";
 //CreateRoom
 //duration:room time expire
 /*
-10000{
-"duration":1800
-}
+10000{ "duration":1800 }
 */
 message CreateRoomReq {
     int64 duration=1;
@@ -22,9 +20,7 @@ message CreateRoomRsp {
 
 //EntryRoom
 /*
-10001{
-"room_id":"room id"
-}
+10001{ "room_id":"room id" }
 */
 message EntryRoomReq {
     string room_id = 1;
@@ -35,6 +31,9 @@ message EntryRoomRsp {
 }
 
 //hello example
+/*
+10003{ "hello":"1544499578.bg7j2ug9htlkf6gqgntg" }
+*/
 message HelloReq {
     string hello = 1;
     string room_id=2;

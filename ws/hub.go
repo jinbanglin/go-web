@@ -61,7 +61,7 @@ func (c *Client) readPump() {
     t, packet, err := c.conn.ReadMessage()
     if err != nil {
       if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-        log.Debug(err, t)
+        log.Error(err, t)
       }
       break
     }
@@ -108,7 +108,6 @@ func (c *Client) writePump() {
   job, _ = c.Hub.clock.AddJobRepeat(PingPeriod, 0, func() {
     c.conn.SetWriteDeadline(time.Now().Add(WriteWait))
     if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-      log.Debug(err)
       clockQuit <- struct{}{}
     }
   })
