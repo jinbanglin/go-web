@@ -32,7 +32,7 @@ message EntryRoomRsp {
 
 //hello example
 /*
-10003{ "hello":"1544499578.bg7j2ug9htlkf6gqgntg" }
+10002{ "hello":"hello","room_id":"1544500340.bg7j8t09htllf87418d0" }
 */
 message HelloReq {
     string hello = 1;
