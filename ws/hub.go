@@ -297,7 +297,7 @@ func (h *WsHub) Run() {
   h.lock.Unlock()
 }
 
-var exitMsg = []byte(`10001{"message":{"code":200,"msg":"SUCCESS"}}`)
+var exitMsg = []byte(`40001{"message":{"code":401,"msg":"You've been kicked."}}`)
 
 func (c *Client) exit() {
   c.Hub.Clients.Delete(c.Cid)
