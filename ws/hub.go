@@ -38,7 +38,7 @@ const (
 
   RedisKey4WsRoom = "websocket:room:info:"
 
-  DsyncLockTimeExpire = time.Second * 3
+  DsyncLockTimeExpire = time.Second * 10
 )
 
 var gUpGrader = websocket.Upgrader{
