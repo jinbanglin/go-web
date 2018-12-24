@@ -10,7 +10,7 @@ import "github.com/jinbanglin/micro/message/message.proto";
 10000{ "duration":1800 }
 */
 message CreateRoomReq {
-    int64 duration=1;
+    int64 duration = 1;
 }
 
 message CreateRoomRsp {
@@ -19,6 +19,7 @@ message CreateRoomRsp {
 }
 
 //EntryRoom
+//you could neet a api to query user info
 /*
 10001{ "room_id":"room id" }
 */
@@ -28,6 +29,7 @@ message EntryRoomReq {
 
 message EntryRoomRsp {
     msg.Message message = 1;
+    repeated string user_id = 2;
 }
 
 //hello example
@@ -36,12 +38,24 @@ message EntryRoomRsp {
 */
 message HelloReq {
     string hello = 1;
-    string room_id=2;
+    string room_id = 2;
 }
 
 message HelloRsp {
     msg.Message message = 1;
     string world = 2;
+}
+
+//exit room
+/*
+10004{"room_id":"1544500340.bg7j8t09htllf87418d0"}
+*/
+message ExitRoomReq {
+    string room_id = 1;
+}
+
+message ExitRoomRsp {
+    msg.Message message = 1;
 }
 
 //protoc --proto_path=${GOPATH}/src:. --gogofast_out=plugins=micro:. *.proto

@@ -5,7 +5,6 @@ import (
   "time"
   "github.com/rs/xid"
   "github.com/jinbanglin/go-web/ws/proto"
-  "github.com/jinbanglin/log"
 )
 
 func Hello(client *Client, req interface{}) (rsp interface{}, err error) {
@@ -29,9 +28,12 @@ func CreateRoom(client *Client, req interface{}) (rsp interface{}, err error) {
 }
 
 func EntryRoom(client *Client, req interface{}) (rsp interface{}, err error) {
-  log.Debug("============ENTRY ROOM==========")
   userLoad, sendPacket := req.(*room.EntryRoomReq), &room.EntryRoomRsp{Message: &MsgSuccessMessage}
   cidNew := client.UserId + "." + xid.New().String()
   client.EntryRoom(userLoad.RoomId, cidNew)
   return sendPacket, nil
+}
+
+func ExitRoom(){
+
 }

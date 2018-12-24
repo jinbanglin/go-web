@@ -173,7 +173,7 @@ func Search(hub *WsHub, userId string) (*Client, bool) {
 }
 
 type Client struct {
-  UserId string
+  UserId strine
   Cid    string //client roomId
   RoomId string //room roomId for find user list to broadcast
   Hub    *WsHub
@@ -306,9 +306,6 @@ func (c *Client) exit() {
 
 func (h *WsHub) redisConfig() error {
   h.ring = helper.GRedisRing
-  if h.ring == nil || h.ring.Ping().Err() != nil {
-    return errors.New("redis config error and ping fail")
-  }
   return nil
 }
 

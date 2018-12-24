@@ -14,6 +14,8 @@
 		EntryRoomRsp
 		HelloReq
 		HelloRsp
+		ExitRoomReq
+		ExitRoomRsp
 */
 package room
 
@@ -36,9 +38,7 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 //
-// 10000{
-// "duration":1800
-// }
+// 10000{ "duration":1800 }
 type CreateRoomReq struct {
 	Duration int64 `protobuf:"varint,1,opt,name=duration,proto3" json:"duration,omitempty"`
 }
@@ -80,9 +80,7 @@ func (m *CreateRoomRsp) GetRoomId() string {
 }
 
 //
-// 10001{
-// "room_id":"room id"
-// }
+// 10001{ "room_id":"room id" }
 type EntryRoomReq struct {
 	RoomId string `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 }
@@ -101,6 +99,7 @@ func (m *EntryRoomReq) GetRoomId() string {
 
 type EntryRoomRsp struct {
 	Message *msg.Message `protobuf:"bytes,1,opt,name=message" json:"message,omitempty"`
+	UserId  []string     `protobuf:"bytes,2,rep,name=user_id,json=userId" json:"user_id,omitempty"`
 }
 
 func (m *EntryRoomRsp) Reset()                    { *m = EntryRoomRsp{} }
@@ -115,7 +114,15 @@ func (m *EntryRoomRsp) GetMessage() *msg.Message {
 	return nil
 }
 
-// hello example
+func (m *EntryRoomRsp) GetUserId() []string {
+	if m != nil {
+		return m.UserId
+	}
+	return nil
+}
+
+//
+// 10002{ "hello":"hello","room_id":"1544500340.bg7j8t09htllf87418d0" }
 type HelloReq struct {
 	Hello  string `protobuf:"bytes,1,opt,name=hello,proto3" json:"hello,omitempty"`
 	RoomId string `protobuf:"bytes,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
@@ -164,6 +171,39 @@ func (m *HelloRsp) GetWorld() string {
 	return ""
 }
 
+// exit room
+type ExitRoomReq struct {
+	RoomId string `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+}
+
+func (m *ExitRoomReq) Reset()                    { *m = ExitRoomReq{} }
+func (m *ExitRoomReq) String() string            { return proto.CompactTextString(m) }
+func (*ExitRoomReq) ProtoMessage()               {}
+func (*ExitRoomReq) Descriptor() ([]byte, []int) { return fileDescriptorRoom, []int{6} }
+
+func (m *ExitRoomReq) GetRoomId() string {
+	if m != nil {
+		return m.RoomId
+	}
+	return ""
+}
+
+type ExitRoomRsp struct {
+	Message *msg.Message `protobuf:"bytes,1,opt,name=message" json:"message,omitempty"`
+}
+
+func (m *ExitRoomRsp) Reset()                    { *m = ExitRoomRsp{} }
+func (m *ExitRoomRsp) String() string            { return proto.CompactTextString(m) }
+func (*ExitRoomRsp) ProtoMessage()               {}
+func (*ExitRoomRsp) Descriptor() ([]byte, []int) { return fileDescriptorRoom, []int{7} }
+
+func (m *ExitRoomRsp) GetMessage() *msg.Message {
+	if m != nil {
+		return m.Message
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*CreateRoomReq)(nil), "room.CreateRoomReq")
 	proto.RegisterType((*CreateRoomRsp)(nil), "room.CreateRoomRsp")
@@ -171,6 +211,8 @@ func init() {
 	proto.RegisterType((*EntryRoomRsp)(nil), "room.EntryRoomRsp")
 	proto.RegisterType((*HelloReq)(nil), "room.HelloReq")
 	proto.RegisterType((*HelloRsp)(nil), "room.HelloRsp")
+	proto.RegisterType((*ExitRoomReq)(nil), "room.ExitRoomReq")
+	proto.RegisterType((*ExitRoomRsp)(nil), "room.ExitRoomRsp")
 }
 func (m *CreateRoomReq) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -278,6 +320,21 @@ func (m *EntryRoomRsp) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n2
 	}
+	if len(m.UserId) > 0 {
+		for _, s := range m.UserId {
+			dAtA[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
 	return i, nil
 }
 
@@ -345,6 +402,58 @@ func (m *HelloRsp) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *ExitRoomReq) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ExitRoomReq) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.RoomId) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintRoom(dAtA, i, uint64(len(m.RoomId)))
+		i += copy(dAtA[i:], m.RoomId)
+	}
+	return i, nil
+}
+
+func (m *ExitRoomRsp) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ExitRoomRsp) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Message != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintRoom(dAtA, i, uint64(m.Message.Size()))
+		n4, err := m.Message.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	return i, nil
+}
+
 func encodeVarintRoom(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -394,6 +503,12 @@ func (m *EntryRoomRsp) Size() (n int) {
 		l = m.Message.Size()
 		n += 1 + l + sovRoom(uint64(l))
 	}
+	if len(m.UserId) > 0 {
+		for _, s := range m.UserId {
+			l = len(s)
+			n += 1 + l + sovRoom(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -420,6 +535,26 @@ func (m *HelloRsp) Size() (n int) {
 	}
 	l = len(m.World)
 	if l > 0 {
+		n += 1 + l + sovRoom(uint64(l))
+	}
+	return n
+}
+
+func (m *ExitRoomReq) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.RoomId)
+	if l > 0 {
+		n += 1 + l + sovRoom(uint64(l))
+	}
+	return n
+}
+
+func (m *ExitRoomRsp) Size() (n int) {
+	var l int
+	_ = l
+	if m.Message != nil {
+		l = m.Message.Size()
 		n += 1 + l + sovRoom(uint64(l))
 	}
 	return n
@@ -760,6 +895,35 @@ func (m *EntryRoomRsp) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UserId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRoom
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRoom
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UserId = append(m.UserId, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRoom(dAtA[iNdEx:])
@@ -1001,6 +1165,168 @@ func (m *HelloRsp) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ExitRoomReq) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRoom
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ExitRoomReq: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ExitRoomReq: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RoomId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRoom
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRoom
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RoomId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRoom(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRoom
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ExitRoomRsp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRoom
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ExitRoomRsp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ExitRoomRsp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRoom
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRoom
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Message == nil {
+				m.Message = &msg.Message{}
+			}
+			if err := m.Message.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRoom(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRoom
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipRoom(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1109,7 +1435,7 @@ var (
 func init() { proto.RegisterFile("room.proto", fileDescriptorRoom) }
 
 var fileDescriptorRoom = []byte{
-	// 249 bytes of a gzipped FileDescriptorProto
+	// 278 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x2a, 0xca, 0xcf, 0xcf,
 	0xd5, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x01, 0xb1, 0xa5, 0x0c, 0xd3, 0x33, 0x4b, 0x32,
 	0x4a, 0x93, 0xf4, 0x92, 0xf3, 0x73, 0xf5, 0xb3, 0x32, 0xf3, 0x92, 0x12, 0xf3, 0xd2, 0x73, 0x32,
@@ -1120,10 +1446,12 @@ var fileDescriptorRoom = []byte{
 	0x8d, 0x8b, 0x1d, 0x6a, 0x1c, 0x58, 0x2d, 0xb7, 0x11, 0x8f, 0x5e, 0x6e, 0x71, 0xba, 0x9e, 0x2f,
 	0x44, 0x2c, 0x08, 0x26, 0x29, 0x24, 0xce, 0xc5, 0x0e, 0x72, 0x60, 0x7c, 0x66, 0x8a, 0x04, 0x93,
 	0x02, 0xa3, 0x06, 0x67, 0x10, 0x1b, 0x88, 0xeb, 0x99, 0xa2, 0xa4, 0xce, 0xc5, 0xe3, 0x9a, 0x57,
-	0x52, 0x54, 0x09, 0xb3, 0x1d, 0x49, 0x21, 0x23, 0x8a, 0x42, 0x33, 0x64, 0x85, 0xc4, 0xdb, 0xac,
-	0x64, 0xc9, 0xc5, 0xe1, 0x91, 0x9a, 0x93, 0x93, 0x0f, 0x32, 0x5c, 0x84, 0x8b, 0x35, 0x03, 0xc4,
-	0x86, 0x1a, 0x0d, 0xe1, 0xe0, 0x76, 0x9b, 0x07, 0x4c, 0x2b, 0x09, 0x1e, 0x15, 0xe1, 0x62, 0x2d,
-	0xcf, 0x2f, 0xca, 0x81, 0x19, 0x05, 0xe1, 0x38, 0xf1, 0x9c, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91,
-	0x1c, 0xe3, 0x83, 0x47, 0x72, 0x8c, 0x49, 0x6c, 0xe0, 0x90, 0x37, 0x06, 0x04, 0x00, 0x00, 0xff,
-	0xff, 0xf4, 0x97, 0xf6, 0xda, 0xc0, 0x01, 0x00, 0x00,
+	0x52, 0x54, 0x09, 0xb3, 0x1d, 0x49, 0x21, 0x23, 0x8a, 0x42, 0x7f, 0x64, 0x85, 0xa4, 0xd9, 0x5c,
+	0x5a, 0x9c, 0x5a, 0x04, 0xb1, 0x99, 0x19, 0x64, 0x20, 0x88, 0xeb, 0x99, 0xa2, 0x64, 0xc9, 0xc5,
+	0xe1, 0x91, 0x9a, 0x93, 0x93, 0x0f, 0xb2, 0x55, 0x84, 0x8b, 0x35, 0x03, 0xc4, 0x86, 0xda, 0x09,
+	0xe1, 0xe0, 0x76, 0xb4, 0x07, 0x4c, 0x2b, 0x09, 0xee, 0x10, 0xe1, 0x62, 0x2d, 0xcf, 0x2f, 0xca,
+	0x81, 0x19, 0x05, 0xe1, 0x28, 0xa9, 0x71, 0x71, 0xbb, 0x56, 0x64, 0x96, 0x10, 0xf4, 0xbd, 0x29,
+	0x92, 0x3a, 0xe2, 0x2d, 0x75, 0xe2, 0x39, 0xf1, 0x48, 0x8e, 0xf1, 0xc2, 0x23, 0x39, 0xc6, 0x07,
+	0x8f, 0xe4, 0x18, 0x93, 0xd8, 0xc0, 0x31, 0x6e, 0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0xd8, 0x12,
+	0x69, 0x02, 0x38, 0x02, 0x00, 0x00,
 }
