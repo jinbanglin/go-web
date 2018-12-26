@@ -17,7 +17,8 @@ import (
   "github.com/go-redis/redis"
   "strings"
   "sync/atomic"
-  "github.com/jinbanglin/go-web/ws/proto"
+  "strconv"
+  "github.com/rs/xid"
 )
 
 const (
@@ -36,7 +37,7 @@ const (
   // service code size
   ServiceCodeSize = 5
 
-  RedisKey4WsRoom = "websocket:room:info:"
+  RedisKey4WsRoomUids = "websocket:room:info:uids:"
 
   DsyncLockTimeExpire = time.Second * 10
 )
@@ -63,6 +64,10 @@ func (c *Client) readPump() {
       if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
         log.Error(err, t)
       }
+      if c.GetState() != 1 {
+        c.Hub.unregister <- c
+      }
+
       break
     }
     serviceCode := helper.Byte2String(packet[0:ServiceCodeSize])
@@ -81,13 +86,12 @@ func (c *Client) readPump() {
       log.Error(err)
       continue
     }
-    broadcast(&broadcastData{
+    Broadcast(&broadcastData{
       roomId: c.RoomId,
       userId: c.UserId,
       data:   bytesCombine(packet[0:ServiceCodeSize], helper.Marshal2Bytes(rsp)),
     }, c.Hub)
   }
-  c.Hub.unregister <- c
   c.conn.Close()
 }
 
@@ -95,7 +99,7 @@ func bytesCombine(pBytes ...[]byte) []byte {
   return bytes.Join(pBytes, []byte(""))
 }
 
-func broadcast(msg *broadcastData, hub *WsHub) {
+func Broadcast(msg *broadcastData, hub *WsHub) {
   hub.broadcast <- msg
 }
 
@@ -142,26 +146,34 @@ func (c *Client) writePump() {
 var upgradeError = []byte(`50001{"message":{"code":500,"msg":"upgrade websocket fail"}}`)
 
 func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request) {
-  client, ok := Search(hub, userId)
-  if ok {
-    client.exit()
-  }
   conn, err := gUpGrader.Upgrade(w, r, nil)
   if err != nil {
     log.Error(err)
     w.Write(upgradeError)
     return
   }
-  client = &Client{
-    UserId: userId,
-    Hub:    hub,
-    conn:   conn,
-    send:   make(chan []byte),
-  }
-  client.Hub.register <- client
 
-  go client.writePump()
-  go client.readPump()
+  client, ok := Search(hub, userId)
+  if ok {
+    client.kicked()
+    client.conn = conn
+    client.SetState()
+  } else {
+    client = &Client{
+      UserId: userId,
+      Hub:    hub,
+      conn:   conn,
+      send:   make(chan []byte),
+    }
+    client.Hub.register <- client
+    client = &Client{
+      UserId: userId,
+      Hub:    hub,
+      conn:   conn,
+      send:   make(chan []byte),
+    }
+    client.Hub.register <- client
+  }
 }
 
 func Search(hub *WsHub, userId string) (*Client, bool) {
@@ -173,18 +185,13 @@ func Search(hub *WsHub, userId string) (*Client, bool) {
 }
 
 type Client struct {
-  UserId strine
-  Cid    string //client roomId
-  RoomId string //room roomId for find user list to broadcast
-  Hub    *WsHub
-  conn   *websocket.Conn
-  send   chan []byte
-  State  int32 //1 in a room
-  Expire int64
-}
-
-func (c *Client) resetCid(cid string) {
-
+  UserId    string
+  RoomId    string //room roomId for find user list to Broadcast
+  Hub       *WsHub
+  conn      *websocket.Conn
+  send      chan []byte
+  State     int32 //0:normal,1:had connected,need update but no unregister
+  IsInARoom bool
 }
 
 type WsHub struct {
@@ -197,8 +204,6 @@ type WsHub struct {
   invoking   *Invoking
 
   clock *clock.Clock
-
-  ring *redis.Ring
 }
 
 type broadcastData struct {
@@ -246,7 +251,7 @@ func (i *Invoking) GetHandler(serviceCode string) (handler *SchedulerHandler, er
 
 var GHub *WsHub
 
-func SetupWEBSocketHub(def bool) {
+func SetupWEBSocketHub() {
   GHub = &WsHub{
     lock:       new(sync.Mutex),
     Clients:    new(sync.Map),
@@ -255,14 +260,6 @@ func SetupWEBSocketHub(def bool) {
     broadcast:  make(chan *broadcastData),
     invoking:   &Invoking{Scheduler: make(map[string]*SchedulerHandler)},
     clock:      clock.NewClock(),
-  }
-  if GHub.redisConfig() != nil {
-    panic("please check your redis config")
-  }
-  if def {
-    GHub.RegisterEndpoint("10000", &room.CreateRoomReq{}, CreateRoom)
-    GHub.RegisterEndpoint("10001", &room.EntryRoomReq{}, EntryRoom)
-    GHub.RegisterEndpoint("10002", &room.HelloReq{}, Hello)
   }
   go GHub.Run()
 }
@@ -277,12 +274,12 @@ func (h *WsHub) Run() {
       if _, ok := h.Clients.Load(client.UserId); ok {
         close(client.send)
         h.Clients.Delete(client.UserId)
-        client.RemoveUser(client.RoomId, client.Cid)
+        client.RemoveUser4Room()
       }
     case packet := <-h.broadcast:
-      cids, _ := h.GetRoom(packet.roomId)
-      if len(cids) > 0 {
-        for _, v := range cids {
+      roomData, _ := h.GetRoom(packet.roomId)
+      if len(roomData.UserIds) > 0 {
+        for _, v := range roomData.UserIds {
           if cnn, ok := h.Clients.Load(v); ok {
             cnn.(*Client).send <- packet.data
           }
@@ -297,59 +294,97 @@ func (h *WsHub) Run() {
   h.lock.Unlock()
 }
 
-var exitMsg = []byte(`40001{"message":{"code":401,"msg":"You've been kicked."}}`)
+var kickedMsg = []byte(`40001{"message":{"code":401,"msg":"you've been kicked"}}`)
 
-func (c *Client) exit() {
-  c.Hub.Clients.Delete(c.Cid)
-  c.send <- exitMsg
+func (c *Client) kicked() {
+  c.send <- kickedMsg
 }
 
-func (h *WsHub) redisConfig() error {
-  h.ring = helper.GRedisRing
-  return nil
+type RoomData struct {
+  ExpireAt time.Time
+  UserIds  []string
 }
 
-func (h *WsHub) GetRoom(roomId string) (result []string, err error) {
-  b, err := h.ring.Get(RedisKey4WsRoom + roomId).Bytes()
+func (c *Client) ExitRoom() {
+  c.RemoveUser4Room()
+  c.RoomId = ""
+  c.IsInARoom = false
+}
+
+var exitMsg = `40002{"message":{"code":402,"msg":"exit room"},"data":{"user_id":"%s"}}`
+
+func (c *Client) RemoveUser4Room() {
+  if !c.IsInARoom {
+    return
+  }
+  Broadcast(&broadcastData{
+    roomId: c.RoomId,
+    userId: c.UserId,
+    data:   helper.String2Byte(fmt.Sprintf(exitMsg, c.UserId)),
+  }, c.Hub)
+  lock := helper.NewDLock(c.RoomId, DsyncLockTimeExpire)
+  lock.Lock()
+  defer lock.Unlock()
+  roomData, err := GHub.GetRoom(c.RoomId)
   if err != nil {
     log.Debug(err)
     return
   }
-  err = json.Unmarshal(b, &result)
+  var index = 0
+  for k, v := range roomData.UserIds {
+    if strings.EqualFold(v, c.UserId) {
+      index = k
+      break
+    }
+  }
+  roomData.UserIds = append(roomData.UserIds[:index], roomData.UserIds[index+1:]...)
+  GHub.SetRoomByRoomById(c.RoomId, roomData.UserIds, roomData.ExpireAt)
+}
+
+func (h *WsHub) GetRoom(roomId string) (roomData *RoomData, err error) {
+  b, err := helper.GRedisRing.Get(RedisKey4WsRoomUids + roomId).Bytes()
+  if err != nil {
+    log.Debug(err)
+    return
+  }
+  roomData = &RoomData{}
+  err = json.Unmarshal(b, &roomData)
   return
 }
 
-func (h *WsHub) SetRoom(roomId string, cid []string, duration time.Duration) error {
-  return h.ring.Set(RedisKey4WsRoom+roomId, helper.Marshal2Bytes(&cid), duration).Err()
+func (h *WsHub) SetRoomByRoomById(roomId string, userIds []string, t time.Time) error {
+  return helper.SetExpireAt(roomId, helper.Marshal2Bytes(&RoomData{UserIds: userIds, ExpireAt: t}), t)
 }
 
-func (c *Client) EntryRoom(roomId, cidNew string) error {
+func (c *Client) CreateRoom(d time.Duration) error {
+  c.IsInARoom = true
+  return c.Hub.SetRoomByRoomById(c.MakeRoomId(), []string{c.UserId}, time.Now().Add(d))
+}
+
+func (c *Client) EntryRoomByRoomId(roomId string) error {
   lock := helper.NewDLock(roomId, DsyncLockTimeExpire)
   lock.Lock()
   defer lock.Unlock()
 
-  if c.GetState() == 1 {
-    return nil
-  }
   roomInfo, err := GHub.GetRoom(roomId)
   if (err != nil && err == redis.Nil) || err == nil {
     var exist = false
-    for k, v := range roomInfo {
-      if strings.EqualFold(c.Cid, v) {
-        roomInfo[k] = cidNew
+    for _, v := range roomInfo.UserIds {
+      if strings.EqualFold(c.UserId, v) {
         exist = true
       }
     }
     if !exist {
-      roomInfo = append(roomInfo, cidNew)
+      roomInfo.UserIds = append(roomInfo.UserIds, c.UserId)
     }
-    c.Cid = cidNew
     c.RoomId = roomId
-    c.Update()
-    return GHub.SetRoom(roomId, roomInfo, time.Duration(c.Expire))
-  } else {
-    return err
+    c.IsInARoom = true
+    if err = GHub.SetRoomByRoomById(roomId, roomInfo.UserIds, roomInfo.ExpireAt); err == nil {
+      c.IsInARoom = true
+      return nil
+    }
   }
+  return err
 }
 
 func (c *Client) GetState() int32 {
@@ -360,34 +395,6 @@ func (c *Client) SetState() {
   atomic.SwapInt32(&c.State, 1)
 }
 
-func (c *Client) resetState() {
-  atomic.CompareAndSwapInt32(&c.State, 1, 0)
-}
-
-func (c *Client) Update() {
-  c.Hub.Clients.Store(c.Cid, c)
-}
-
-func (c *Client) RemoveUser(roomId, cidOld string) {
-  if c.GetState() != 1 {
-    return
-  }
-  lock := helper.NewDLock(roomId, DsyncLockTimeExpire)
-  lock.Lock()
-  defer lock.Unlock()
-  cids, err := GHub.GetRoom(roomId)
-  if err != nil {
-    log.Debug(err)
-    return
-  }
-  var index = 0
-  for k, v := range cids {
-    if strings.EqualFold(v, cidOld) {
-      index = k
-      break
-    }
-  }
-  cids = append(cids[:index], cids[index+1:]...)
-  GHub.SetRoom(roomId, cids, DsyncLockTimeExpire)
-  c.resetState()
+func (c *Client) MakeRoomId() string {
+  return strconv.FormatInt(time.Now().Unix(), 10) + "." + xid.New().String()
 }
