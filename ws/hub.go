@@ -19,9 +19,10 @@ import (
   "sync/atomic"
   "strconv"
   "github.com/rs/xid"
+  "github.com/spf13/viper"
 )
 
-const (
+var (
   // Time allowed to write a message to the peer.
   WriteWait = 10 * time.Second
 
@@ -32,7 +33,7 @@ const (
   PingPeriod = (PongWait * 9) / 10
 
   // Maximum message size allowed from peer.
-  MaxMessageSize = 512
+  MaxMessageSize int64 = 1024
 
   // service code size
   ServiceCodeSize = 5
@@ -41,6 +42,21 @@ const (
 
   DsyncLockTimeExpire = time.Second * 10
 )
+
+func WsChaos() {
+  if v := viper.GetInt("ws.write_wait"); v > 0 {
+    WriteWait = time.Duration(v) * time.Second
+  }
+  if v := viper.GetInt("ws.pong_wait"); v > 0 {
+    PongWait = time.Duration(v) * time.Second
+  }
+  if v := viper.GetInt64("ws.max_message_size"); v > 0 {
+    MaxMessageSize = v
+  }
+  if v := viper.GetInt("ws.service_code_size"); v > 0 {
+    ServiceCodeSize = v
+  }
+}
 
 var gUpGrader = websocket.Upgrader{
   ReadBufferSize:  1024,
