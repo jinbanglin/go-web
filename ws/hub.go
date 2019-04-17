@@ -145,7 +145,7 @@ func (c *Client) writePump() {
 
 var upgradeError = []byte(`50001{"message":{"code":500,"msg":"upgrade websocket fail"}}`)
 
-func WSUpgrade(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request) {
+func Handshake(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request) {
   conn, err := gUpGrader.Upgrade(w, r, nil)
   if err != nil {
     log.Error(err)
