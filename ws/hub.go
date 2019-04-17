@@ -305,6 +305,7 @@ type RoomData struct {
   UserIds  []string
 }
 
+//-------------------------------chat demo-----------------------
 func (c *Client) ExitRoom() {
   c.RemoveUser4Room()
   c.RoomId = ""
