@@ -86,6 +86,7 @@ func (c *Client) readPump() {
 
       break
     }
+    log.Debugf("FROM |user_id=%s", c.UserId, helper.Byte2String(packet))
     serviceCode := helper.Byte2String(packet[0:ServiceCodeSize])
     s, err := c.Hub.invoking.GetHandler(serviceCode)
     if err != nil {
@@ -102,6 +103,9 @@ func (c *Client) readPump() {
       log.Error(err)
       continue
     }
+
+    log.Debugf("BROADCAST |user_id=%s", c.UserId, helper.Marshal2String(rsp))
+
     Broadcast(&broadcastData{
       roomId: c.RoomId,
       userId: c.UserId,
@@ -259,7 +263,7 @@ func (h *WsHub) RegisterEndpoint(serviceCode string, req proto.Message, endpoint
 func (i *Invoking) GetHandler(serviceCode string) (handler *SchedulerHandler, err error) {
   var ok bool
   if handler, ok = i.Scheduler[serviceCode]; !ok {
-    log.Error(" |no service code=", serviceCode)
+    log.Error(" |no such service code :", serviceCode)
     return nil, errors.New("no service")
   }
   return
@@ -294,6 +298,8 @@ func (h *WsHub) Run() {
       }
     case packet := <-h.broadcast:
       roomData, _ := h.GetRoom(packet.roomId)
+
+      log.Debugf("TO |user_ids=%v", roomData, helper.Byte2String(packet.data))
       if len(roomData.UserIds) > 0 {
         for _, v := range roomData.UserIds {
           if cnn, ok := h.Clients.Load(v); ok {
@@ -316,12 +322,13 @@ func (c *Client) kicked() {
   c.send <- kickedMsg
 }
 
+//-------------------------------chat demo-----------------------
+
 type RoomData struct {
   ExpireAt time.Time
   UserIds  []string
 }
 
-//-------------------------------chat demo-----------------------
 func (c *Client) ExitRoom() {
   c.RemoveUser4Room()
   c.RoomId = ""
