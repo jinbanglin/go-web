@@ -20,6 +20,8 @@ import (
   "strconv"
   "github.com/rs/xid"
   "github.com/spf13/viper"
+  "context"
+  "github.com/google/uuid"
 )
 
 var (
@@ -72,6 +74,14 @@ func (c *Client) setBase() {
   c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(PongWait)); return nil })
 }
 
+func (c *Client) setTraceContext() {
+  c.ctx = context.WithValue(c.ctx, log.GContextKey, uuid.New().String())
+}
+
+func (c *Client) getTraceContext() string {
+  return c.ctx.Value(log.GContextKey).(string)
+}
+
 func (c *Client) readPump() {
   c.setBase()
   for {
@@ -86,21 +96,22 @@ func (c *Client) readPump() {
 
       break
     }
-    log.Debugf("FROM |user_id=%s", c.UserId, helper.Byte2String(packet))
+    c.setTraceContext()
+    log.Debugf2(c.ctx, "FROM |user_id=%s", c.UserId, helper.Byte2String(packet))
     serviceCode := helper.Byte2String(packet[0:ServiceCodeSize])
     s, err := c.Hub.invoking.GetHandler(serviceCode)
     if err != nil {
-      log.Error(err)
+      log.Error2(c.ctx, err)
       continue
     }
     req := reflect.New(s.RequestType).Interface().(proto.Message)
     if err = json.Unmarshal(packet[ServiceCodeSize:], req); err != nil {
-      log.Error(err)
+      log.Error2(c.ctx, err)
       continue
     }
     rsp, err := s.handler(c, req)
     if err != nil {
-      log.Error(err)
+      log.Error2(c.ctx, err)
       continue
     }
 
@@ -146,13 +157,13 @@ func (c *Client) writePump() {
       }
       w, err := c.conn.NextWriter(websocket.TextMessage)
       if err != nil {
-        log.Debug(err)
+        log.Error2(c.ctx, err)
         job.Cancel()
         return
       }
       w.Write(packet)
       if err := w.Close(); err != nil {
-        log.Debug(err)
+        log.Error2(c.ctx, err)
         job.Cancel()
         return
       }
@@ -184,6 +195,7 @@ func Handshake(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request
       Hub:    hub,
       conn:   conn,
       send:   make(chan []byte),
+      ctx:    context.Background(),
     }
     client.Hub.register <- client
     client = &Client{
@@ -205,6 +217,7 @@ func Search(hub *WsHub, userId string) (*Client, bool) {
 }
 
 type Client struct {
+  ctx       context.Context
   UserId    string
   RoomId    string //room roomId for find user list to Broadcast
   Hub       *WsHub
@@ -212,6 +225,14 @@ type Client struct {
   send      chan []byte
   State     int32 //0:normal,1:had connected,need update but no unregister
   IsInARoom bool
+}
+
+func (c *Client) GetState() int32 {
+  return atomic.LoadInt32(&c.State)
+}
+
+func (c *Client) SetState() {
+  atomic.SwapInt32(&c.State, 1)
 }
 
 type WsHub struct {
@@ -409,14 +430,6 @@ func (c *Client) EntryRoomByRoomId(roomId string) error {
     }
   }
   return err
-}
-
-func (c *Client) GetState() int32 {
-  return atomic.LoadInt32(&c.State)
-}
-
-func (c *Client) SetState() {
-  atomic.SwapInt32(&c.State, 1)
 }
 
 func (c *Client) MakeRoomId() string {
