@@ -85,15 +85,14 @@ func (c *Client) getTraceContext() string {
 func (c *Client) readPump() {
   c.setBase()
   for {
-    t, packet, err := c.conn.ReadMessage()
+    _, packet, err := c.conn.ReadMessage()
     if err != nil {
       if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-        log.Error(err, t)
+        log.Error(err)
       }
       if c.GetState() != 1 {
         c.Hub.unregister <- c
       }
-
       break
     }
     c.setTraceContext()
@@ -177,6 +176,7 @@ func (c *Client) writePump() {
 var upgradeError = []byte(`50001{"message":{"code":500,"msg":"upgrade websocket fail"}}`)
 
 func Handshake(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request) {
+  log.Debugf("HANDSHAKE |user_id=%s |timestamp=%v", userId, time.Now().Format("2006-01-02 15:04:05"))
   conn, err := gUpGrader.Upgrade(w, r, nil)
   if err != nil {
     log.Error(err)
@@ -198,13 +198,8 @@ func Handshake(hub *WsHub, userId string, w http.ResponseWriter, r *http.Request
       ctx:    context.Background(),
     }
     client.Hub.register <- client
-    client = &Client{
-      UserId: userId,
-      Hub:    hub,
-      conn:   conn,
-      send:   make(chan []byte),
-    }
-    client.Hub.register <- client
+    go client.writePump()
+    go client.readPump()
   }
 }
 
@@ -312,6 +307,7 @@ func (h *WsHub) Run() {
     case client := <-h.register:
       h.Clients.Store(client.UserId, client)
     case client := <-h.unregister:
+      log.Debugf("OFFLINE |user_id=%s |timestamp=%v", client.UserId, time.Now().Format("2006-01-02 15:04:05"))
       if _, ok := h.Clients.Load(client.UserId); ok {
         close(client.send)
         h.Clients.Delete(client.UserId)
